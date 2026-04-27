@@ -52,7 +52,7 @@ async function getAccountsBalanceController(req, res) {
 
 }
 
-// 🔥 FREEZE ACCOUNT
+
 async function freezeAccount(req, res) {
   const { accountId } = req.params;
 
@@ -75,7 +75,6 @@ async function freezeAccount(req, res) {
   account.status = "FROZEN";
   await account.save();
 
-  // 🔥 SAVE IN NEW COLLECTION
   await accountActionModel.create({
     account: accountId,
     action: "FREEZE",
@@ -88,8 +87,6 @@ async function freezeAccount(req, res) {
     message: "Account frozen successfully"
   });
 }
-
-// 🔥 UNFREEZE ACCOUNT
 async function unfreezeAccount(req, res) {
   const { accountId } = req.params;
 
@@ -112,7 +109,6 @@ async function unfreezeAccount(req, res) {
   account.status = "ACTIVE";
   await account.save();
 
-  // 🔥 SAVE IN NEW COLLECTION
   await accountActionModel.create({
     account: accountId,
     action: "UNFREEZE",
