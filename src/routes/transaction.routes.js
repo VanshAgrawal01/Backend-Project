@@ -31,4 +31,13 @@ transactionRoutes.get(
   transactionController.getLedger
 );
 
+transactionRoutes.post(
+  "/:transactionId/reverse",
+  authMiddleware.authMiddleware,
+  transactionController.reverseTransaction
+);
+
+
+
+
 module.exports = transactionRoutes;

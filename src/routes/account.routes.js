@@ -31,6 +31,11 @@ router.get("/", authMiddleware.authMiddleware, accountController.getUserAccounts
 router.get("/balance/:accountId", authMiddleware.authMiddleware, accountController.getAccountsBalanceController);
 
 
+router.post("/freeze/:accountId", authMiddleware.authMiddleware , accountController.freezeAccount);
+router.post("/unfreeze/:accountId",  authMiddleware.authMiddleware,accountController.unfreezeAccount );
+
+
+
 
 
 module.exports = router;

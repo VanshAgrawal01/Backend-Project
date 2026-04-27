@@ -51,26 +51,65 @@ async function sendRegistrationEmail(to, subject, text, html) {
 
 // Function to send transaction email
 async function sendTransactionEmail(userEmail, userName, amount, toAccount) {
-  subject = 'Transaction Successful!';
-  text = `Dear ${userName}, your transaction of $${amount} to account ${toAccount} was successful.`;
-  html = `<p>Dear <strong>${userName}</strong>, your transaction of <strong>$${amount}</strong> to account <strong>${toAccount}</strong> was successful.</p>`;
+  const subject = 'Transaction Successful!';
+  const text = `Dear ${userName}, your transaction of $${amount} to account ${toAccount} was successful.`;
+  const html = `<p>Dear <strong>${userName}</strong>, your transaction of <strong>$${amount}</strong> to account <strong>${toAccount}</strong> was successful.</p>`;
 
   await sendEmail(userEmail, subject, text, html);
 }
 
 // Function to send transaction failure email
 async function sendTransactionFailureEmail(userEmail, userName, amount, toAccount) {
-  subject = 'Transaction Failed!';
-  text = `Dear ${userName}, your transaction of $${amount} to account ${toAccount} failed.`;
-  html = `<p>Dear <strong>${userName}</strong>, your transaction of <strong>$${amount}</strong> to account <strong>${toAccount}</strong> failed.</p>`;
+  const subject = 'Transaction Failed!';
+  const text = `Dear ${userName}, your transaction of $${amount} to account ${toAccount} failed.`;
+  const html = `<p>Dear <strong>${userName}</strong>, your transaction of <strong>$${amount}</strong> to account <strong>${toAccount}</strong> failed.</p>`;
 
   await sendEmail(userEmail, subject, text, html);
 }
 
+async function sendReverseEmail(userEmail, userName, amount, transactionId) {
+  const subject = "Transaction Reversal Confirmation - Backend Ledger";
+
+   const text = `
+     Dear ${userName},
+     We would like to inform you that a transaction of INR ${amount} has been successfully reversed in your account.
+
+     Transaction ID: ${transactionId}
+
+     If you did not authorize this action or have any concerns, please contact our support team immediately.
+
+     Thank you,  
+     Backend Ledger Team
+   `;
+
+   const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+    <h2 style="color:#2c3e50;">Transaction Reversal Confirmation</h2>
+    <p>Dear <b>${userName}</b>,</p>
+    <p>
+      We would like to inform you that a transaction of 
+      <b style="color:#e74c3c;">INR ${amount}</b> has been successfully reversed in your account.
+    </p>
+    <p>
+      <b>Transaction ID:</b> ${transactionId}
+    </p>
+    <p style="color:#555;">
+      If you did not authorize this action or have any concerns, please contact our support team immediately.
+    </p>
+    <hr />
+    <p style="font-size:12px; color:gray;">
+      This is an automated message from Backend Ledger System. Please do not reply to this email.
+    </p>
+    <p style="font-weight:bold;">Thank you,<br/>Backend Ledger Team</p>
+  </div>
+  `;
+  await sendEmail(userEmail, subject, text, html);
+}
 module.exports = { // Exporting the sendRegistrationEmail function so that it can be used in other parts of the application, such as after a user successfully registers. Also exporting sendTransactionEmail function to send transaction notification email to user after transaction is completed.
   sendRegistrationEmail,
   sendTransactionEmail,
-  sendTransactionFailureEmail
+  sendTransactionFailureEmail,
+  sendReverseEmail
 };
 
 //When the file is imported, transporter and verify run immediately. When registration succeeds, sendRegistrationEmail() runs, which calls sendEmail(), and finally transporter.sendMail() sends the email.

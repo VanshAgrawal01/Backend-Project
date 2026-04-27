@@ -3,7 +3,7 @@ const ledgerModel = require("../models/ledger.model");
 const accountModel = require("../models/account.model");
 const emailService = require("../services/email.service");
 const mongoose = require("mongoose");
-
+const { v4: uuid } = require('uuid');
 
 /**
  * create new transaction controller
@@ -20,6 +20,28 @@ const mongoose = require("mongoose");
  * 9. commit mongoDB session
  * 10. send email notifications in background
  */
+async function checkDailyLimitLogic(userId, amount) {
+
+  const DAILY_LIMIT = 50000;
+
+  const accounts = await accountModel.find({ user: userId }).select("_id");
+  const accountIds = accounts.map(acc => acc._id);
+
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const txns = await transactionModel.find({
+    fromAccount: { $in: accountIds },
+    createdAt: { $gte: startOfDay },
+    status: "COMPLETED"
+  });
+
+  const totalSpent = txns.reduce((sum, txn) => sum + txn.amount, 0);
+
+  if (totalSpent + amount > DAILY_LIMIT)  {
+    throw new Error("Daily limit exceeded");
+  }
+}
 
 
 async function createTransaction(req, res) {
@@ -104,6 +126,14 @@ async function createTransaction(req, res) {
       success: false,
       message: " Both fromAccount or toAccount must be active to process the transaction"
     });
+  }
+   try {
+    await checkDailyLimitLogic(req.user._id, Number(amount));
+  } catch (err) {
+    return res.status(400).json({
+      success: false,
+      message: err.message
+     });
   }
   
   /**
@@ -376,13 +406,103 @@ async function getLedger(req, res) {
     });
   }
 }
+async function reverseTransaction(req, res) {
+  const { transactionId } = req.params;
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const originalTxn = await transactionModel
+      .findById(transactionId)
+      .populate({
+        path: "fromAccount",
+        populate: { path: "user", select: "name email" }
+      })
+      .populate({
+        path: "toAccount",
+        populate: { path: "user", select: "name email" }
+      });
+
+    if (!originalTxn) {
+      return res.status(404).json({
+        success: false,
+        message: "Transaction not found"
+      });
+    }
+
+    const alreadyReversed = await transactionModel.findOne({
+      idempotencyKey: "REV-" + transactionId
+    });
+
+    if (alreadyReversed) {
+      return res.status(400).json({
+        success: false,
+        message: "Transaction already reversed"
+      });
+    }
+
+    const reverseTxn = new transactionModel({
+      fromAccount: originalTxn.toAccount._id,
+      toAccount: originalTxn.fromAccount._id,
+      amount: originalTxn.amount,
+      status: "REVERSAL",
+      idempotencyKey: "REV-" + transactionId
+    });
+
+    await reverseTxn.save({ session });
+
+    await ledgerModel.create([
+      {
+        account: reverseTxn.fromAccount,
+        amount: reverseTxn.amount,
+        transaction: reverseTxn._id,
+        type: "DEBIT"
+      },
+      {
+        account: reverseTxn.toAccount,
+        amount: reverseTxn.amount,
+        transaction: reverseTxn._id,
+        type: "CREDIT"
+      }
+    ], { session, ordered: true });
+
+   
+    await session.commitTransaction();
+    session.endSession();
+
+    setImmediate(() => {
+      emailService.sendReverseEmail(
+        originalTxn.fromAccount?.user?.email,
+        originalTxn.fromAccount?.user?.name,
+        originalTxn.amount
+      ).catch(err => console.error("Email failed:", err.message));
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Transaction reversed successfully",
+      reverseTransaction: reverseTxn
+    });
+
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+}
 
 
 module.exports = {
   createTransaction,
   createInitialFundsTransaction,
   getTransactions ,
-  getLedger
+  getLedger,
+  reverseTransaction
 
 }
 
