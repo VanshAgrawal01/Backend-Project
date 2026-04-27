@@ -21,6 +21,7 @@ const mongoose = require("mongoose");
  * 10. send email notifications in background
  */
 
+
 async function createTransaction(req, res) {
 
   /**
@@ -271,9 +272,118 @@ catch (error) {
 }
 
 
+async function getTransactions(req, res) {
+
+  const userId = req.user._id;
+  const { page = 1, limit = 10 } = req.query;
+  const skip = (page - 1) * limit;
+
+  const userAccounts = await accountModel.find({ user: userId }).select("_id");
+
+  const accountIds = userAccounts.map(acc => acc._id);
+
+  const transactions = await transactionModel.find({
+    $or: [
+      { fromAccount: { $in: accountIds } },
+      { toAccount: { $in: accountIds } }
+    ]
+  })
+  .sort({ createdAt: -1 })
+  .skip(skip)
+  .limit(Number(limit))
+
+  .populate({
+    path: "fromAccount",
+    populate: { path: "user", select: "name email" }
+  })
+  .populate({
+    path: "toAccount",
+    populate: { path: "user", select: "name email" }
+  });
+
+  const formattedTransactions = transactions.map(txn => {
+
+  const isDebit =
+    txn.fromAccount?.user?._id.toString() === userId.toString();
+
+  return {
+    id: txn._id,
+    amount: txn.amount,
+    currency: "INR",
+    type: isDebit ? "DEBIT" : "CREDIT",
+    label: txn.fromAccount ? "Transfer" : "Initial Funding", 
+    from: txn.fromAccount?.user?.name || "SYSTEM",
+    to: txn.toAccount?.user?.name,
+    date: new Date(txn.createdAt).toLocaleString(), // 🥈\\
+    status: txn.status
+  };
+});
+
+  const total = await transactionModel.countDocuments({
+    $or: [
+      { fromAccount: { $in: accountIds } },
+      { toAccount: { $in: accountIds } }
+    ]
+  });
+  return res.status(200).json({
+    success: true,
+    total,
+    page: Number(page),
+    limit: Number(limit),
+    transactions: formattedTransactions 
+  });
+}
+
+async function getLedger(req, res) {
+  try {
+    const userId = req.user._id;
+    const { accountId } = req.params;
+
+    const account = await accountModel.findOne({
+      _id: accountId,
+      user: userId
+    });
+
+    if (!account) {
+      return res.status(404).json({
+        success: false,
+        message: "Account not found"
+      });
+    }
+
+    const ledger = await ledgerModel.find({
+      account: accountId
+    }).sort({ createdAt: -1 });
+
+    const formattedLedger = ledger.map(entry => ({
+      id: entry._id,
+      amount: entry.amount,
+      type: entry.type,
+      date: new Date(entry.createdAt).toLocaleString(),
+      transactionId: entry.transaction
+    }));
+
+    return res.status(200).json({
+      success: true,
+      total: formattedLedger.length,
+      ledger: formattedLedger
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+}
+
+
 module.exports = {
   createTransaction,
-  createInitialFundsTransaction
+  createInitialFundsTransaction,
+  getTransactions ,
+  getLedger
+
 }
 
 

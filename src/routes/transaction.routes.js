@@ -19,5 +19,16 @@ transactionRoutes.post("/",authMiddleware.authMiddleware, transactionController.
  */
 transactionRoutes.post("/system/initial-funds", authMiddleware.authSystemUserMiddleware, transactionController.createInitialFundsTransaction); //for testing only, remove in production
 
+transactionRoutes.get(
+  "/",
+  authMiddleware.authMiddleware,
+  transactionController.getTransactions
+);
+
+transactionRoutes.get(
+  "/accounts/:accountId/ledger",
+  authMiddleware.authMiddleware,
+  transactionController.getLedger
+);
 
 module.exports = transactionRoutes;
