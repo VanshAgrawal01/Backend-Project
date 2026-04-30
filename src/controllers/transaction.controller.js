@@ -4,6 +4,8 @@ const accountModel = require("../models/account.model");
 const emailService = require("../services/email.service");
 const mongoose = require("mongoose");
 const { v4: uuid } = require('uuid');
+const { detectFraud } = require("../services/fraud.service");
+const fraudLogModel = require("../models/fraudLog.model");
 
 /**
  * create new transaction controller
@@ -116,25 +118,61 @@ async function createTransaction(req, res) {
 
   }
 
-  /**
-   * 3. check account status
-   */
+// 3. account status check
+if (fromUserAccount.status !== "ACTIVE" || toUserAccount.status !== "ACTIVE") {
+  return res.status(400).json({
+    success: false,
+    message: "Both accounts must be active"
+  });
+}
 
-  //here we check from account and to account status is active or not, if not active return error means it is frozen or closed account
-  if (fromUserAccount.status !== "ACTIVE" || toUserAccount.status !== "ACTIVE") {
-    return res.status(400).json({
-      success: false,
-      message: " Both fromAccount or toAccount must be active to process the transaction"
-    });
-  }
-   try {
-    await checkDailyLimitLogic(req.user._id, Number(amount));
-  } catch (err) {
-    return res.status(400).json({
-      success: false,
-      message: err.message
-     });
-  }
+// 4. daily limit check
+try {
+  await checkDailyLimitLogic(req.user._id, Number(amount));
+} catch (err) {
+  return res.status(400).json({
+    success: false,
+    message: err.message
+  });
+}
+
+// fraud check
+const fraud = await detectFraud(req.user._id, amount);
+
+await fraudLogModel.create({
+  user: req.user._id,
+  account: fromAccount,
+  amount,
+  riskScore: fraud.riskScore,
+  action: fraud.action,
+  reason: fraud.reason
+});
+
+if (fraud.action === "VERIFY") {
+  return res.status(200).json({
+    success: true,
+    message: "Verification required",
+    action: "VERIFY"
+  });
+}
+
+if (fraud.action === "BLOCK") {
+  return res.status(400).json({
+    success: false,
+    message: "Transaction blocked"
+  });
+}
+
+if (fraud.action === "FREEZE") {
+  await accountModel.findByIdAndUpdate(fromAccount, {
+    status: "FROZEN"
+  });
+
+  return res.status(403).json({
+    success: false,
+    message: "Account frozen"
+  });
+}
   
   /**
    * 4. check sending account balance from ledger

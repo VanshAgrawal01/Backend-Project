@@ -1,8 +1,9 @@
 const express = require('express');
 const cookieParser = require('cookie-parser');
+const { globalLimiter } = require("./middleware/rateLimit.middleware");
 
 const app = express();
-
+app.use(globalLimiter);
 app.use(express.json());
 app.use(cookieParser());
 
